@@ -25,7 +25,7 @@ DEFAULT_INTERFACE_SETTINGS = {
     # "system" follows the OS. "snow" remains the pure-white Default palette.
     "theme": "system",
     "language": "en",
-    "sidebar_description": "✨ Data Intelligence Lab @ HKU",
+    "sidebar_description": "✨ Beyond Future Initiative Inc.",
     "sidebar_nav_order": {
         "start": ["/", "/history", "/knowledge-bases", "/notebooks"],
         "learnResearch": ["/question", "/solver", "/research", "/co_writer"],

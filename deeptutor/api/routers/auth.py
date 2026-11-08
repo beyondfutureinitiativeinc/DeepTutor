@@ -1259,35 +1259,76 @@ async def register(body: RegisterRequest, request: Request, response: Response) 
             "is_admin": False,
         }
 
-    # Standard mode — only allowed before the first admin exists.
-    if not is_first_user():
+    # Standard mode — BFI customized multi-tenant registration
+    # Rate limit by client IP (max 10 registrations per hour per IP)
+    global _bfi_register_ips
+    if "_bfi_register_ips" not in globals():
+        _bfi_register_ips = {}
+    client_ip = request.client.host if request.client else "unknown"
+    now_ts = time.time()
+    history = [t for t in _bfi_register_ips.get(client_ip, []) if now_ts - t < 3600]
+    if len(history) >= 10:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Self-registration is closed. Ask an administrator to create your account.",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registrations from this IP address. Please try again later.",
         )
+    history.append(now_ts)
+    _bfi_register_ips[client_ip] = history
 
-    existing = {u["username"] for u in list_users()}
-    if body.username in existing:
+    existing = {str(u.get("username", "")).lower() for u in list_users()}
+    if body.username.strip().lower() in existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username already taken",
+            detail="Username or email already taken",
         )
 
-    add_user(body.username, body.password)
+    first_user = is_first_user()
+    add_user(body.username.strip(), body.password, role="admin" if first_user else "user")
     user_id = ""
     role = "user"
     for item in list_users():
-        if item.get("username") == body.username:
+        if item.get("username") == body.username.strip():
             user_id = str(item.get("id") or "")
             role = str(item.get("role") or "user")
             break
-    logger.info(f"First user (admin) registered: '{body.username}'")
+
+    # Domain-based model assignment for non-admin accounts:
+    if not first_user and user_id:
+        try:
+            from deeptutor.multi_user.grants import save_grant, empty_grant
+            is_bfi = body.username.strip().lower().endswith("@beyondfuture.org")
+            if is_bfi:
+                # Grant all system-configured non-owner-bound LLM models
+                from deeptutor.multi_user.model_access import admin_catalog, is_owner_bound
+                catalog = admin_catalog()
+                llm_service = catalog.get("services", {}).get("llm", {})
+                profiles = llm_service.get("profiles", []) or []
+                granted_models = []
+                for p in profiles:
+                    if is_owner_bound(p):
+                        continue
+                    pid = str(p.get("id") or "")
+                    mids = [str(m.get("id")) for m in p.get("models", []) if m.get("id")]
+                    if mids:
+                        granted_models.append({"profile_id": pid, "model_ids": mids})
+                grant_payload = empty_grant(user_id)
+                grant_payload["models"]["llm"] = granted_models
+                save_grant(user_id, grant_payload)
+                logger.info(f"[BFI] Auto-assigned internal model grant to: {body.username}")
+            else:
+                # External user: empty grant, forced to bring personal ChatGPT OAuth
+                save_grant(user_id, empty_grant(user_id))
+                logger.info(f"[BFI] External user registered (BYO-model mode): {body.username}")
+        except Exception as grant_err:
+            logger.warning(f"[BFI] Failed to set initial grant for {body.username}: {grant_err}")
+
+    logger.info(f"User registered: '{body.username}' (role={role}, first={first_user})")
     return {
         "ok": True,
         "user_id": user_id,
-        "username": body.username,
+        "username": body.username.strip(),
         "role": role,
-        "is_first_user": True,
+        "is_first_user": first_user,
         "is_admin": role == "admin",
     }
 

@@ -76,7 +76,26 @@ def redacted_model_access(user_id: str | None = None) -> dict[str, list[dict[str
     grant = load_grant(user_id)
     catalog = admin_catalog()
     result: dict[str, list[dict[str, Any]]] = {"llm": []}
-    for item in grant.get("models", {}).get("llm", []) or []:
+    grant_llm_items = list(grant.get("models", {}).get("llm", []) or [])
+
+    # Dynamic system model access for Beyond Future Initiative (@beyondfuture.org) accounts
+    from .identity import get_user_by_id
+    user_info = get_user_by_id(user_id)
+    if user_info and str(user_info[0]).strip().lower().endswith("@beyondfuture.org"):
+        llm_service = catalog.get("services", {}).get("llm", {})
+        profiles = llm_service.get("profiles", []) or []
+        dynamic_items = []
+        for p in profiles:
+            if is_owner_bound(p):
+                continue
+            pid = str(p.get("id") or "")
+            mids = [str(m.get("id")) for m in p.get("models", []) if m.get("id")]
+            if mids:
+                dynamic_items.append({"profile_id": pid, "model_ids": mids})
+        if dynamic_items:
+            grant_llm_items = dynamic_items
+
+    for item in grant_llm_items:
         profile_id = str(item.get("profile_id") or item.get("id") or "")
         profile = _profile_by_id(catalog, "llm", profile_id)
         if profile is not None and is_owner_bound(profile):

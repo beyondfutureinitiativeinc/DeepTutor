@@ -549,7 +549,7 @@ class TurnRequestPreparer:
                 # instead of a silent fall-through to the global client.
                 if not has_capability_access("llm"):
                     raise RuntimeError(
-                        "No LLM model is assigned to your account. Please contact an administrator."
+                        "No LLM model is assigned to your account. Please connect your personal model (ChatGPT / OpenAI Codex OAuth) in Settings or use an @beyondfuture.org account."
                     )
                 # Pin the first granted-and-available model as the selection.
                 assigned_llms = [

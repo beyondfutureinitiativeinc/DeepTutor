@@ -148,7 +148,7 @@ DEFAULT_UI_SETTINGS = {
     # interface.json, so the two readers of that file can't drift on what a
     # fresh install defaults to.
     **INTERFACE_DEFAULTS,
-    "sidebar_description": "✨ Data Intelligence Lab @ HKU",
+    "sidebar_description": "✨ Beyond Future Initiative Inc.",
     "sidebar_nav_order": DEFAULT_SIDEBAR_NAV_ORDER,
     # User-toggleable chat tools. Default = all on; the /settings/tools page
     # is the single switchboard. Removed names (e.g. tools that ship later
