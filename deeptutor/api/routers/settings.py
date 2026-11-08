@@ -612,12 +612,26 @@ def patch_ui_settings(**fields: Any) -> None:
     atomic_update(_settings_file(), lambda stored: {**stored, **fields})
 
 
-def _require_settings_admin() -> None:
+def _catalog_service_for_user() -> ModelCatalogService:
+    user = get_current_user()
+    if user.is_admin:
+        return get_model_catalog_service()
+    from deeptutor.multi_user.personal_models import owner_catalog_service
+
+    return owner_catalog_service()
+
+
+def _require_system_admin() -> None:
     if not get_current_user().is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Model configuration is managed by an administrator.",
+            detail="System configuration is managed by an administrator.",
         )
+
+
+def _require_settings_admin() -> None:
+    # In BFI BYOM mode, non-admin and guest users can configure their personal models/providers
+    return
 
 
 def _require_codex_oauth_actor() -> None:
@@ -956,16 +970,12 @@ def _network_settings_payload() -> dict[str, Any]:
 
 @router.get("")
 async def get_settings():
-    user = get_current_user()
-    if not user.is_admin:
-        # Non-admins never see the catalog (provider URLs/keys); their model
-        # choices come from /settings/llm-options (grant-filtered).
-        return {"ui": load_ui_settings()}
+    service = _catalog_service_for_user()
     from deeptutor.services.model_selection.tasks import task_kind_payload
 
     return {
         "ui": load_ui_settings(),
-        "catalog": redact_catalog_secrets(get_model_catalog_service().load()),
+        "catalog": redact_catalog_secrets(service.load()),
         "providers": _provider_choices(),
         "connection_targets": _connection_targets(),
         # What actually runs on the background task model. The list comes from
@@ -1089,19 +1099,18 @@ async def update_openai_codex_reasoning_effort(
 
 @router.get("/catalog")
 async def get_catalog():
-    _require_settings_admin()
-    return {"catalog": redact_catalog_secrets(get_model_catalog_service().load())}
+    return {"catalog": redact_catalog_secrets(_catalog_service_for_user().load())}
 
 
 @router.get("/network")
 async def get_network_settings():
-    _require_settings_admin()
+    _require_system_admin()
     return _network_settings_payload()
 
 
 @router.put("/network")
 async def update_network_settings(payload: NetworkSettingsUpdate):
-    _require_settings_admin()
+    _require_system_admin()
     service = get_runtime_settings_service()
     current = service.load_system(include_process_overrides=False)
     service.save_system(
@@ -1757,7 +1766,7 @@ async def get_llm_options():
 @router.put("/catalog")
 async def update_catalog(payload: CatalogPayload):
     _require_settings_admin()
-    service = get_model_catalog_service()
+    service = _catalog_service_for_user()
     current = service.load()
     restored = restore_catalog_secrets(payload.catalog, current)
     proposed = reconcile_codex_catalog_update(current, restored)
@@ -1772,7 +1781,7 @@ async def apply_registry_edit(payload: RegistryEditPayload):
     _require_settings_admin()
     from deeptutor.services.settings.registry_edit import merge_registry_edit
 
-    service = get_model_catalog_service()
+    service = _catalog_service_for_user()
     draft_service = get_settings_draft_service()
     stored = draft_service.load()
     current = service.load()
@@ -1804,7 +1813,7 @@ async def apply_provider_edit(payload: ProviderEditPayload):
     _require_settings_admin()
     from deeptutor.services.settings.provider_edit import merge_provider_edit
 
-    service = get_model_catalog_service()
+    service = _catalog_service_for_user()
     draft_service = get_settings_draft_service()
     stored = draft_service.load()
     current = service.load()
@@ -1869,7 +1878,7 @@ async def apply_catalog_service(payload: CatalogServicePayload):
     """
 
     _require_settings_admin()
-    service = get_model_catalog_service()
+    service = _catalog_service_for_user()
     current = service.load()
     draft_service = get_settings_draft_service()
     stored_draft = draft_service.load()
@@ -1939,7 +1948,7 @@ async def update_settings_draft(payload: SettingsDraftPayload):
     merged = merge_draft_secrets(
         payload.model_dump(),
         stored,
-        get_model_catalog_service().load(),
+        _catalog_service_for_user().load(),
     )
     if is_empty_draft(merged):
         service.clear()
@@ -1964,7 +1973,7 @@ async def apply_catalog(payload: CatalogPayload | None = None):
     back resolving to the previous key.
     """
     _require_settings_admin()
-    service = get_model_catalog_service()
+    service = _catalog_service_for_user()
     draft_service = get_settings_draft_service()
     current = service.load()
     if payload is not None:
@@ -1994,7 +2003,7 @@ async def test_provider_connection(payload: ProviderProbePayload):
     _require_settings_admin()
     from deeptutor.services.settings.provider_probe import probe_provider, probe_search_provider
 
-    current = get_model_catalog_service().load()
+    current = _catalog_service_for_user().load()
     saved = get_settings_draft_service().load().get("catalog")
     source = restore_catalog_secrets(saved, current) if isinstance(saved, dict) else current
     fields = payload.model_dump()
@@ -2063,7 +2072,7 @@ async def fetch_models_from_provider(payload: FetchModelsPayload):
     if is_copilot:
         base_url, api_key, api_format = "", None, "auto"
     elif payload.profile_id and (api_key == CATALOG_SECRET_MASK or not api_format):
-        service = get_model_catalog_service().load().get("services", {}).get(payload.service, {})
+        service = _catalog_service_for_user().load().get("services", {}).get(payload.service, {})
         profile = next(
             (item for item in service.get("profiles", []) if item.get("id") == payload.profile_id),
             None,
@@ -2301,7 +2310,7 @@ async def list_voice_choices(payload: VoiceDiscoveryPayload):
     _require_settings_admin()
     from deeptutor.services.voice.discovery import discover_voices
 
-    service = get_model_catalog_service()
+    service = _catalog_service_for_user()
     current = service.load()
     saved = get_settings_draft_service().load().get("catalog")
     source = restore_catalog_secrets(saved, current) if isinstance(saved, dict) else current
@@ -2326,7 +2335,7 @@ async def preview_voice(payload: VoicePreviewPayload) -> Response:
     from deeptutor.services.voice.base import VoiceProviderError, VoiceProviderTimeout
     from deeptutor.services.voice.preview import preview_failure_message, synthesize_preview
 
-    service = get_model_catalog_service()
+    service = _catalog_service_for_user()
     current = service.load()
     saved = get_settings_draft_service().load().get("catalog")
     # Restore the saved draft against live first; a missing draft secret must
@@ -2359,7 +2368,7 @@ async def preview_service(service: str, payload: ServicePreviewPayload):
 
     try:
         audio = validate_input(service, payload.text, payload.audio, payload.content_type)
-        catalog_service = get_model_catalog_service()
+        catalog_service = _catalog_service_for_user()
         current = catalog_service.load()
         saved = get_settings_draft_service().load().get("catalog")
         source = restore_catalog_secrets(saved, current) if isinstance(saved, dict) else current
@@ -2394,7 +2403,7 @@ async def start_service_test(service: str, payload: CatalogPayload | None = None
     _require_settings_admin()
     catalog = None
     if payload is not None:
-        catalog_service = get_model_catalog_service()
+        catalog_service = _catalog_service_for_user()
         current = catalog_service.load()
         saved = get_settings_draft_service().load().get("catalog")
         catalog = (

@@ -1,7 +1,7 @@
 "use client";
 
 import Tooltip from "@/shared/ui/Tooltip";
-import { LogOut } from "lucide-react";
+import { LogIn, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { logout } from "@/lib/auth";
@@ -14,13 +14,43 @@ interface LogoutButtonProps {
 export function LogoutButton({ collapsed = false }: LogoutButtonProps) {
   const router = useRouter();
   const { t } = useTranslation();
-  const { enabled } = useAuthStatus();
+  const { enabled, isGuest } = useAuthStatus();
 
   if (!enabled) return null;
 
   async function handleLogout() {
     await logout();
     router.replace("/login");
+  }
+
+  function handleLogin() {
+    router.push("/login");
+  }
+
+  if (isGuest) {
+    if (collapsed) {
+      return (
+        <Tooltip label={t("Sign in (BFI)")} side="top">
+          <button
+            onClick={handleLogin}
+            className="rounded-lg p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--primary)]"
+            aria-label={t("Sign in")}
+          >
+            <LogIn size={16} strokeWidth={1.5} />
+          </button>
+        </Tooltip>
+      );
+    }
+
+    return (
+      <button
+        onClick={handleLogin}
+        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--primary)]"
+      >
+        <LogIn size={16} strokeWidth={1.5} />
+        <span>{t("Sign in")}</span>
+      </button>
+    );
   }
 
   if (collapsed) {

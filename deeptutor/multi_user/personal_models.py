@@ -83,7 +83,6 @@ def _personal_catalog_profiles() -> list[dict[str, Any]]:
         profile
         for profile in profiles
         if isinstance(profile, dict)
-        and is_owner_bound(profile)
         and (profile.get("managed_by") != _CODEX_MANAGED_BY or _codex_profile_is_current(profile))
     ]
 

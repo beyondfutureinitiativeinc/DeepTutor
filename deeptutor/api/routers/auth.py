@@ -346,6 +346,7 @@ class AuthStatusResponse(BaseModel):
     username: str | None = None
     role: str | None = None
     is_admin: bool = False
+    is_guest: bool = False
     avatar: str = ""
     preset: AccountPreset | None = None
     learning_policy: dict | None = None
@@ -485,19 +486,16 @@ async def require_auth(
         return None
 
     token = _extract_token(authorization, dt_token)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    payload = decode_token(token)
+    payload = decode_token(token) if token else None
     if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
+        import uuid
+
+        guest_uuid = uuid.uuid4().hex[:12]
+        guest_id = f"guest_{guest_uuid}"
+        payload = TokenPayload(
+            username=guest_id,
+            role="user",
+            user_id=guest_id,
         )
 
     _install_current_user(payload)
@@ -890,6 +888,7 @@ async def auth_status(
         # what clients need to render the scoped experience.
         if learning_policy is not None and preset != "learner":
             preset = "learner"
+    is_guest = bool(payload and payload.user_id and payload.user_id.startswith("guest_"))
     return AuthStatusResponse(
         enabled=True,
         authenticated=payload is not None,
@@ -897,10 +896,33 @@ async def auth_status(
         username=payload.username if payload else None,
         role=payload.role if payload else None,
         is_admin=payload.role == "admin" if payload else False,
+        is_guest=is_guest,
         avatar=avatar,
         preset=preset,
         learning_policy=learning_policy,
     )
+
+
+@router.get("/guest-token")
+async def guest_token(response: Response) -> dict:
+    """Issue a unique guest session JWT and cookie for an anonymous visitor."""
+    import uuid
+
+    guest_uuid = uuid.uuid4().hex[:12]
+    guest_id = f"guest_{guest_uuid}"
+    token = create_token(
+        username=guest_id,
+        role="user",
+        user_id=guest_id,
+    )
+    attrs = _cookie_attrs()
+    response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **attrs)
+    return {
+        "ok": True,
+        "token": token,
+        "user_id": guest_id,
+        "username": guest_id,
+    }
 
 
 @router.post("/login")

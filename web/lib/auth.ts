@@ -17,6 +17,7 @@ export interface AuthStatus {
   username?: string;
   role?: string;
   is_admin?: boolean;
+  is_guest?: boolean;
   /** Server-side account preset; null for identities without a local account. */
   preset?: "standard" | "learner" | "custom" | null;
   /** Avatar marker: "", "icon:<name>:<color>", or "img:<version>". */

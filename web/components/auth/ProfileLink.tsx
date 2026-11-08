@@ -26,6 +26,8 @@ export function ProfileLink({ collapsed = false }: ProfileLinkProps) {
 
   if (!status?.username) return null;
 
+  const isGuest = Boolean(status.is_guest || status.username.startsWith("guest_"));
+  const displayName = isGuest ? t("Guest") : status.username;
   const active = pathname.startsWith("/profile");
   const avatar = (
     <UserAvatar
@@ -40,7 +42,7 @@ export function ProfileLink({ collapsed = false }: ProfileLinkProps) {
 
   if (collapsed) {
     return (
-      <Tooltip label={`${t("My profile")} — ${status.username}`} side="right">
+      <Tooltip label={`${t("My profile")} — ${displayName}`} side="right">
         <Link
           href="/profile"
           className={`rounded-lg p-2 transition-colors
@@ -69,7 +71,7 @@ export function ProfileLink({ collapsed = false }: ProfileLinkProps) {
           }`}
       >
         {avatar}
-        <span className="truncate">{status.username}</span>
+        <span className="truncate">{displayName}</span>
       </Link>
     </Tooltip>
   );

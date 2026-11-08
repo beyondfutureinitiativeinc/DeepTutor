@@ -48,7 +48,7 @@ function redirectToLogin(
   return response;
 }
 
-export function proxy(req: NextRequest): NextResponse {
+export async function proxy(req: NextRequest): Promise<NextResponse> {
   // Domain access control: only allow access via beyondfuture.org (and local healthchecks)
   const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").toLowerCase().split(":")[0];
   const isAllowedHost =
@@ -99,7 +99,42 @@ export function proxy(req: NextRequest): NextResponse {
   }
 
   const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (classifyToken(token, Date.now()) !== "valid") {
+  const isTokenValid = classifyToken(token, Date.now()) === "valid";
+
+  if (!isTokenValid) {
+    try {
+      const res = await fetch(new URL("/api/auth/guest-token", API_BASE_URL), {
+        headers: {
+          "x-deeptutor-frontend-host": host,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const guestToken = data.token;
+        if (guestToken) {
+          const reqHeaders = new Headers(req.headers);
+          reqHeaders.set("cookie", `${COOKIE_NAME}=${guestToken}`);
+          const resWithCookie = NextResponse.next({
+            request: {
+              headers: reqHeaders,
+            },
+          });
+          resWithCookie.cookies.set({
+            name: COOKIE_NAME,
+            value: guestToken,
+            httpOnly: true,
+            secure: true,
+            sameSite: "lax",
+            path: "/",
+            maxAge: 30 * 24 * 3600,
+          });
+          return resWithCookie;
+        }
+      }
+    } catch (e) {
+      console.error("Auto guest token error:", e);
+    }
+
     return redirectToLogin(req, { clearCookie: Boolean(token) });
   }
 
