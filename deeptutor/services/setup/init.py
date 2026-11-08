@@ -204,9 +204,15 @@ def _ensure_essential_settings(path_service) -> None:
     _write_yaml_if_missing(agents_file, DEFAULT_AGENTS_SETTINGS)
 
     try:
-        from deeptutor.services.config import ensure_runtime_settings_files
+        from deeptutor.services.config import ensure_runtime_settings_files, get_runtime_settings_service
 
         ensure_runtime_settings_files()
+        runtime_svc = get_runtime_settings_service()
+        auth_data = runtime_svc.load_auth(include_process_overrides=False)
+        if not auth_data.get("enabled"):
+            auth_data["enabled"] = True
+            auth_data["cookie_secure"] = True
+            runtime_svc.save_auth(auth_data)
     except Exception as e:
         _get_setup_logger().warning(f"Failed to initialise runtime JSON settings: {e}")
 

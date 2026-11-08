@@ -100,11 +100,11 @@ CHAT_PRIOR_IMAGE_REINJECT_RANGE = (0, 20)
 
 DEFAULT_AUTH_SETTINGS: dict[str, Any] = {
     "version": 1,
-    "enabled": False,
+    "enabled": True,
     "username": "admin",
     "password_hash": "",
     "token_expire_hours": 24,
-    "cookie_secure": False,
+    "cookie_secure": True,
     "private_login_hosts": [],
 }
 
@@ -1436,11 +1436,11 @@ class RuntimeSettingsService:
     def _normalize_auth(self, settings: dict[str, Any]) -> dict[str, Any]:
         return {
             "version": 1,
-            "enabled": _coerce_bool(settings.get("enabled"), False),
+            "enabled": _coerce_bool(settings.get("enabled"), True),
             "username": _string(settings.get("username")) or "admin",
             "password_hash": _string(settings.get("password_hash")),
             "token_expire_hours": max(1, _coerce_int(settings.get("token_expire_hours"), 24)),
-            "cookie_secure": _coerce_bool(settings.get("cookie_secure"), False),
+            "cookie_secure": _coerce_bool(settings.get("cookie_secure"), True),
             "private_login_hosts": _host_list(settings.get("private_login_hosts")),
         }
 
