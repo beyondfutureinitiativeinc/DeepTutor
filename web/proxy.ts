@@ -49,6 +49,21 @@ function redirectToLogin(
 }
 
 export function proxy(req: NextRequest): NextResponse {
+  // Domain access control: only allow access via beyondfuture.org (and local healthchecks)
+  const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").toLowerCase().split(":")[0];
+  const isAllowedHost =
+    !host ||
+    host.endsWith("beyondfuture.org") ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0";
+  if (!isAllowedHost) {
+    return new NextResponse("Access Forbidden: Direct Railway access is disabled. Only beyondfuture.org is permitted.", {
+      status: 403,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+
   const { pathname, search } = req.nextUrl;
 
   if (isCodexCallbackPath(pathname)) {
