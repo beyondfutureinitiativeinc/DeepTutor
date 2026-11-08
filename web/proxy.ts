@@ -52,8 +52,8 @@ export function proxy(req: NextRequest): NextResponse {
   // Domain access control: only allow access via beyondfuture.org (and local healthchecks)
   const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").toLowerCase().split(":")[0];
   const isAllowedHost =
-    !host ||
-    host.endsWith("beyondfuture.org") ||
+    host === "beyondfuture.org" ||
+    host.endsWith(".beyondfuture.org") ||
     host === "localhost" ||
     host === "127.0.0.1" ||
     host === "0.0.0.0";

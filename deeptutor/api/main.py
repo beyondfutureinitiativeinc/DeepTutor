@@ -424,7 +424,7 @@ async def json_error_boundary(request: Request, call_next):
 async def verify_bfi_host(request: Request, call_next):
     # Only allow requests from beyondfuture.org or local healthchecks
     host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(":")[0].lower()
-    if host and not (host.endswith("beyondfuture.org") or host in ("localhost", "127.0.0.1", "testserver")):
+    if host and not (host == "beyondfuture.org" or host.endswith(".beyondfuture.org") or host in ("localhost", "127.0.0.1", "testserver")):
         return JSONResponse(
             status_code=403,
             content={"detail": "Forbidden: Direct Railway access is disabled. Only beyondfuture.org is permitted."},
